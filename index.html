@@ -1,0 +1,530 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+<title>Deep Syntax Editor</title>
+</head>
+<body>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+	<script src="./underscore.js"></script>
+<style>
+@import url(http://fonts.googleapis.com/css?family=Orbitron);
+
+/* overall layout */
+.column{
+	display: table-cell;
+	width: 40em;
+	padding: 2em;
+	border-left: 1px dotted gray;
+}
+
+/* common codeblock */
+div{
+	font-family: monospace;
+}
+
+.quote{
+	border-radius: 5px;
+	box-shadow: rgba(0,0,0,0.5) 0 0 7px inset;
+	
+	position: relative;
+	display: inline-block;
+	vertical-align: top;
+}
+
+.p_keyword{
+	color: #00a;
+}
+
+.p_string{
+	color: #f80;
+}
+
+.p_number{
+	color: #88a;
+}
+
+.s_plain{
+	background-color: white;
+}
+
+.s_javascript{
+	background-color: #fffaf5;
+}
+
+.s_html{
+	background-color: #fafaff;
+}
+
+/* deep syntax */
+.current_syntax{
+	position: absolute;
+	top: 0.1em;
+	left: 0.1em;
+
+	font-size: 50%;
+	color: #888;
+	font-family: 'Orbitron', sans-serif;
+}
+
+/* deep syntax live */
+.editor{
+	font-family: monospace;
+	font-size: 12px;
+	width: 40em;
+	height: 10em;
+}
+.editor .line{
+	min-height: 15px;
+}
+.overlay{
+	border:none;
+	resize:none;
+	padding: 0;
+	font-size: 12px;
+	font-family: monospace;
+	line-height: 15px;
+	height: 10em;
+	width: 40em;
+	opacity: 0.5;
+}
+.cursor{
+	border-left: 2px solid black;
+	height: 15px;
+	display: inline-block;
+}
+</style>
+
+<div class="row">
+	<div class="column">
+		<h1>古典的表示</h1>
+
+		<div class="quote s_javascript">
+			<div class="line">
+			<span class="p_keyword">var</span> x = <span class="p_string">"&lt;div&gt;\n一行目\n\"二行目\"\n&lt;/div&gt;"</span>;
+		</div>
+		<div class="line">
+		alert();
+	</div>
+		</div>
+	</div>
+
+	<div class="column">
+		<h1>深いシンタックス</h1>
+		
+		<div class="quote s_javascript" title="javascript">
+			<div class="line">
+				<span class="p_keyword">var</span> x =
+				<div class="quote s_html" title="HTML in string">
+					<div class="line">&lt;<span class="p_keyword">div</span>&gt;</div>
+					<div class="line">一行目</div>
+					<div class="line">"二行目"</div>
+					<div class="line">
+					
+						<div class="line">&lt;/<span class="p_keyword">div</span>&gt;</div>
+					</div>
+				</div>;
+			</div>
+			<div class="line">alert();</div>
+	</div>
+</div>
+
+<div>
+	<h1>demo</h1>
+	<div style="position:relative">
+		<div class="editor quote" style="" id="hl">
+			<div class="line">
+			</div>
+		</div>
+		<br/>
+
+		<textarea class="overlay" id="org"></textarea>
+	</div>
+</div>
+
+<script>
+var curr_target = null;
+var cursor_span = null;
+var cursor_index = 0;
+var ix_line=0, ix_char=0;
+
+$(document).ready(function(){
+	make_editable($('#hl'));
+	curr_target = $('#hl');
+});
+
+$('#org').click(function(e){
+	$('#org').hide(0);
+	var pass = document.elementFromPoint(e.clientX, e.clientY);
+	$(pass).click();
+	$('#org').show(0);
+});
+
+$('#org').keyup(function(e){
+	console.log(e.keyCode); // 37:left 39:right 38:up 40:down
+
+	var text = $('#org').val();
+	curr_target.data('raw',text);
+
+	var ttext = text.slice(0,$('#org')[0].selectionStart);
+	var nlines = ttext.split('\n').length;
+	if(nlines == 0){
+		ix_line = 0;
+		ix_char = 0;
+	}
+	else{
+		ix_line = nlines-1;
+		ix_char = _.last(ttext.split('\n')).length;
+	}
+	console.log('cursor',ix_line,ix_char);
+
+	sync_layer_down(curr_target, text, true);
+	sync_layer_up(curr_target);
+});
+
+
+function make_editable(target){
+	target.click(function(e){
+		console.log('focusing on',target);
+		curr_target = target;
+		ix_line = 0;
+		ix_char = 0;
+
+		$('#org').val(target.data('raw'));
+		$('#org').focus();
+
+		return false;
+	});
+}
+
+// repr to text
+function sync_layer_up(target){
+	var parent = target.parents('.quote').first();
+	if(parent.length == 0) return;
+	
+	var syntax = get_syntax(parent.data('syntax'));
+	function line_to_str(line){
+		var ls = _.map($(line).children(), function(node){
+			if($(node).is('span'))
+				return node.innerText;
+			else if($(node).is('div'))
+				return syntax.token_specs[0].f_escape($(node).data('raw'));
+			else
+				return '';
+		}).join('');
+		$(line).data('raw', ls);
+		return ls;
+	}
+
+	var raw = _.map(parent.children('.line'), line_to_str).join('\n');
+	parent.data('raw', raw);
+	sync_layer_up(parent);
+}
+
+// text to repr
+function sync_layer_down(target, source_str, first){
+	var text = source_str;
+	var syntax = guess_syntax(text);
+
+	target.empty();
+
+	target.removeClass('s_plain');
+	target.removeClass('s_javascript');
+	target.removeClass('s_html');
+	target.data('syntax',syntax.name);
+	target.attr('title', syntax.name);
+	target.addClass('s_'+syntax.name);
+
+	// create spec table
+    var type_to_spec = {};
+    _.each(syntax.token_specs, function(spec){
+    	type_to_spec[spec.type] = spec;
+    });
+
+    // convert text to repr
+    var placed_cursor = !first; // treat as "placed" when not in first plane
+    var ls = text.split('\n');
+    if(ls.length == 0) ls = [''];
+
+    _.each(ls, function(str, iline){
+		var ts = tokenize(syntax.token_specs, str);
+		var line = $('<div class="line"/>');
+		var pe=0;
+
+		function step_space_to(tb){
+			if(pe<tb){
+				var spaces=$('<span/>');
+				while(pe<tb){
+					if(!placed_cursor && pe==ix_char && iline==ix_line){
+						spaces.append($('<div/>').attr('class','cursor'));
+						placed_cursor = true;
+					}
+					spaces.append('&nbsp;');
+					pe+=1;
+					if(!placed_cursor && pe==ix_char && iline==ix_line){
+						spaces.append($('<div/>').attr('class','cursor'));
+						placed_cursor = true;
+					}
+				}
+				line.append(spaces);
+			}
+		}
+
+		_.each(ts, function(t){
+			var spec = type_to_spec[t.type];
+
+			step_space_to(t.begin);
+
+			if(spec.escape){
+				var raw_str = spec.f_unescape(t.body);
+
+				// create new layer
+				var hl = $('<div/>').attr('class','quote').text(raw_str).data('raw',raw_str);
+				line.append(hl);
+				sync_layer_down(hl, raw_str, false);
+
+				make_editable(hl);
+			}
+			else{
+				var hl = $('<span/>').attr('class','p_'+t.type);
+				if(!placed_cursor && iline==ix_line && t.begin<=ix_char && ix_char<=t.end){
+					var offset = ix_char-t.begin;
+					hl.append(t.body.slice(0,offset));
+					hl.append($('<div/>').attr('class','cursor'));
+					hl.append(t.body.slice(offset));
+					placed_cursor = true;
+				}
+				else
+					hl.text(t.body);
+				line.append(hl);
+			}
+			pe = t.end;
+		});
+		step_space_to(str.length);
+		target.append(line);
+	});
+}
+
+
+
+
+// return token as ranges
+// "ab cd" -> [{begin:0, end:2, type:'id'}, {begin:3, end:5, type:'id'}]]
+// returned ranges are non-overlapping and in descending order.
+function tokenize(token_specs, line){
+	function word_to_tokens_by_rest(word){
+		if(word.is_token){
+			word.type = _.first(token_specs).type;
+			return word;
+		}
+		else{
+			return _.map(tokenize(_.rest(token_specs), word.body),
+				function(sub_token){
+					sub_token.begin += word.begin;
+					sub_token.end += word.begin;
+					return sub_token;
+				});
+		}
+	}
+
+	if(token_specs.length>0){
+		return _.flatten(_.map(
+			tokenize1(_.first(token_specs).pattern, line),
+			word_to_tokens_by_rest));
+	}
+	else
+		return [];
+}
+
+// return ranges
+function tokenize1(pattern, phrase){
+	var offset = 0;
+	var words = [];
+	while(phrase.length>0){
+		var res = pattern.exec(phrase);
+		if(res){
+			if(res.index>0){
+				words.push({
+					is_token: false,
+					begin: offset,
+					end: offset+res.index,
+					body: phrase.slice(0,res.index)
+				});
+			}
+
+			words.push({
+				is_token: true,
+				begin: offset+res.index,
+				end: offset+res.index+res[0].length,
+				body: res[0]
+			});
+
+			var doffset = res.index+res[0].length;
+			offset += doffset;
+			phrase = phrase.slice(doffset);
+		}
+		else{
+			if(phrase.length>0){
+				words.push({
+					is_token: false,
+					begin: offset,
+					end: offset+phrase.length,
+					body: phrase
+				});
+				break;
+			}
+		}
+	}
+
+	return words;
+}
+
+
+// very hackish syntax guessing usable only for demo.
+function guess_syntax(text){
+	var cnt_jskw = 0, cnt_tags = 0;
+	try{
+		cnt_jskw = text.match(/(var|function|alert|;)/g).length;
+	}catch(e){}
+	try{
+		cnt_tags = text.match(/<\/?(div|a|span|html|body|button)/g).length;
+	}catch(e){}
+
+	var score_js = (cnt_jskw*10) / text.length;
+	var score_html = (cnt_tags*10) / text.length;
+	scores = [
+		[js_syntax, score_js],
+		[html_syntax, score_html],
+		[plain_syntax, 1-(score_js+score_html)]
+	]
+	
+	return _.max(scores, function(p){return p[1];})[0];
+}
+
+function get_syntax(s){
+	return {
+		javascript: js_syntax,
+		html: html_syntax,
+		plain: plain_syntax
+	}[s];
+}
+
+js_syntax = {
+	name: 'javascript',
+	token_specs: [
+		{
+			type: 'dq',
+			escape: true,
+			trigger: '"',
+			f_escape: function(s){
+				function to_esc(c){
+					if(c=='\n')
+						return '\\n';
+					else if(c=='\\')
+						return '\\\\';
+					else if(c=='"')
+						return '\\"';
+					else
+						return c;
+				}
+				return '"'+s.replace(/(\n|\\|")/g, to_esc)+'"';
+			},
+			f_unescape: function(s){
+				return eval(s);
+			},
+			pattern: /"([^\\"]|\\[\\nt"])*"/
+		},
+		{
+			type: 'sq',
+			escape: true,
+			trigger: "'",
+			f_unescape: function(s){
+				return eval(s);
+			},
+			pattern: /'([^\\']|\\[\\nt'])*'/
+		},
+		{
+			escape: false,
+			type: 'delim',
+			pattern: /[=+*!$%&(){}<>=-^;\/\-\[\]]/
+		},
+		{
+			escape: false,
+			type: 'keyword',
+			pattern: /(var|function|return)/
+		},
+		{
+			escape: false,
+			type: 'number',
+			pattern: /[0-9]+/
+		},
+		{
+			escape: false,
+			type: 'identifier',
+			pattern: /\S+/
+		}
+	]
+}
+
+html_syntax = {
+	name: 'html',
+	token_specs: [
+		{
+			escape: true,
+			trigger: '"',
+			f_escape: function(s){
+				function to_esc(c){
+					if(c=='\n')
+						return '\\n';
+					else if(c=='\\')
+						return '\\\\';
+					else if(c=='"')
+						return '\\"';
+					else if(c=='<')
+						return '&lt;';
+					else if(c=='>')
+						return '&gt';
+					else
+						return c;
+				}
+				return '"'+s.replace(/(<|>|\n|\\|")/g, to_esc)+'"';
+			},
+			f_unescape: function(s){
+				return eval(s).replace(/&gt;/g,'>').replace(/&lt;/g, '<');
+			},
+			type: 'attrib',
+			pattern: /"([^\\"]|\\[\\nt"])*"/
+		},
+		{
+			escape: false,
+			type: 'delim',
+			pattern: /[<>\/]/
+		},
+		{
+			escape: false,
+			type: 'keyword',
+			pattern: /(html|body|head|div|span|a|table|script|style|meta|title|button)/
+		},
+		{
+			escape: false,
+			type: 'other',
+			pattern: /.+/
+		}
+	]
+}
+
+plain_syntax = {
+	name: 'plain',
+	token_specs: [
+		{
+			type: 'all',
+			escape: false,
+			pattern: /.*/
+		}
+	]
+}
+
+</script>
+
+</body>
+</html>
