@@ -128,25 +128,35 @@ textarea.editor{
 	<div style="position:relative">
 		<div class="editor quote" style="" id="hl"></div>
 		<br/>
+
 		<textarea class="editor quote" id="org"></textarea>
-		<div class="children"></div>
 	</div>
 </div>
 
 <script>
-$(document).ready(function(e){
-	hook_sync($('#hl'), $('#org'));
+var curr_target = null;
+$(document).ready(function(){
+	make_editable($('#hl'));
+	curr_target = $('#hl');
 });
 
-function hook_sync(target, source){
-	source.keyup(function(e){
-		source.next('.children').empty();
-		sync_layer(js_syntax, target, source);
-	});	
+$('#org').keyup(function(e){
+	var text = $('#org').val();
+	curr_target.data('raw',text);
+	sync_layer(js_syntax, curr_target, text);
+});
+
+function make_editable(target){
+	target.click(function(e){
+		console.log('focusing on',target);
+		curr_target = target;
+		$('#org').val(target.data('raw'));
+		return false;
+	});
 }
 
-function sync_layer(syntax, target, source){
-	var text=source.val();
+function sync_layer(syntax, target, source_str){
+	var text=source_str;
 
 	target.empty();
 	target.addClass('s_'+syntax.name);
@@ -174,17 +184,12 @@ function sync_layer(syntax, target, source){
 			if(spec.escape){
 				var raw_str = spec.f_unescape(t.body);
 
-				// create new input
-				var org = $('<textarea/>').attr('class','editor quote').text(raw_str);
-				source.next('.children').append(org);
-				source.next('.children').append($('<div/>').attr('class','children'));
-				
 				// create new layer
-				var hl = $('<div/>').attr('class','quote').text(raw_str);
+				var hl = $('<div/>').attr('class','quote').text(raw_str).data('raw',raw_str);
 				line.append(hl);
-				sync_layer(js_syntax, hl, org);
+				sync_layer(js_syntax, hl, raw_str);
 
-				hook_sync(hl, org);
+				make_editable(hl);
 			}
 			else{
 				var hl = $('<span/>').attr('class','p_'+t.type).text(t.body);
