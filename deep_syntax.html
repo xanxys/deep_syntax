@@ -143,7 +143,8 @@ $(document).ready(function(){
 $('#org').keyup(function(e){
 	var text = $('#org').val();
 	curr_target.data('raw',text);
-	sync_layer(js_syntax, curr_target, text);
+	sync_layer_down(js_syntax, curr_target, text);
+	sync_layer_up(curr_target);
 });
 
 function make_editable(target){
@@ -155,7 +156,32 @@ function make_editable(target){
 	});
 }
 
-function sync_layer(syntax, target, source_str){
+// repr to text
+function sync_layer_up(target){
+	var parent = target.parents('.quote');
+	if(parent.length == 0) return;
+	
+	function line_to_str(line){
+		return _.map(line.children, function(node){
+			var ws = [];
+			if($(node).is('span')){
+				return node.innerText;
+			}
+			else if($(node).is('div')){
+				return js_syntax.token_specs[0].f_escape($(node).data('raw'));
+			}
+			else
+				return '';
+		}).join('');
+	}
+
+	var raw = _.map(parent.children('.line'), line_to_str).join('\n');
+	parent.data('raw', raw);
+	sync_layer_up(parent);
+}
+
+// text to repr
+function sync_layer_down(syntax, target, source_str){
 	var text=source_str;
 
 	target.empty();
@@ -176,10 +202,12 @@ function sync_layer(syntax, target, source_str){
 		_.each(ts, function(t){
 			var spec = type_to_spec[t.type];
 
+			var spaces=$('<span/>');
 			while(pe<t.begin){
-				line.append('&nbsp;');
+				spaces.append('&nbsp;');
 				pe+=1;
 			}
+			line.append(spaces);
 			
 			if(spec.escape){
 				var raw_str = spec.f_unescape(t.body);
@@ -187,7 +215,7 @@ function sync_layer(syntax, target, source_str){
 				// create new layer
 				var hl = $('<div/>').attr('class','quote').text(raw_str).data('raw',raw_str);
 				line.append(hl);
-				sync_layer(js_syntax, hl, raw_str);
+				sync_layer_down(js_syntax, hl, raw_str);
 
 				make_editable(hl);
 			}
@@ -288,7 +316,15 @@ js_syntax = {
 			escape: true,
 			trigger: '"',
 			f_escape: function(s){
-				return '"'+s+'"';
+				function to_esc(c){
+					if(c=='\n')
+						return '\\n';
+					else if(c=='\\')
+						return '\\\\';
+					else if(c=='"')
+						return '\\"';
+				}
+				return '"'+s.replace(/(\n|\\|")/g, to_esc)+'"';
 			},
 			f_unescape: function(s){
 				return eval(s);
