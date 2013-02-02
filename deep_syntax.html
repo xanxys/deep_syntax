@@ -134,10 +134,16 @@ textarea.editor{
 </div>
 
 <script>
-$("#org").keyup(function(e){
-	$('#org').next('.children').empty();
-	sync_layer(js_syntax, $('#hl'), $('#org'));
+$(document).ready(function(e){
+	hook_sync($('#hl'), $('#org'));
 });
+
+function hook_sync(target, source){
+	source.keyup(function(e){
+		source.next('.children').empty();
+		sync_layer(js_syntax, target, source);
+	});	
+}
 
 function sync_layer(syntax, target, source){
 	var text=source.val();
@@ -172,17 +178,13 @@ function sync_layer(syntax, target, source){
 				var org = $('<textarea/>').attr('class','editor quote').text(raw_str);
 				source.next('.children').append(org);
 				source.next('.children').append($('<div/>').attr('class','children'));
-
-				org.keyup(function(e){
-					org.next('.children').empty();
-					sync_layer(js_syntax, hl, org);
-					sync_layer_up(js_syntax, hl, org);
-				});
-
+				
 				// create new layer
 				var hl = $('<div/>').attr('class','quote').text(raw_str);
 				line.append(hl);
 				sync_layer(js_syntax, hl, org);
+
+				hook_sync(hl, org);
 			}
 			else{
 				var hl = $('<span/>').attr('class','p_'+t.type).text(t.body);
@@ -194,9 +196,7 @@ function sync_layer(syntax, target, source){
 	});
 }
 
-function sync_layer_up(syntax){
 
-}
 
 
 // return token as ranges
