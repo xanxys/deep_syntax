@@ -76,14 +76,16 @@ div{
 	height: 10em;
 }
 .editor .line{
-	height: 15px;
+	min-height: 15px;
 }
 textarea.editor{
 	border:none;
 	resize:none;
 	padding: 0;
 	line-height: 15px;
-
+}
+.children{
+	margin-left: 1em;
 }
 </style>
 
@@ -127,38 +129,73 @@ textarea.editor{
 		<div class="editor quote" style="" id="hl"></div>
 		<br/>
 		<textarea class="editor quote" id="org"></textarea>
+		<div class="children"></div>
 	</div>
 </div>
 
 <script>
-$("#org").keyup(function(e) {
-	sync_full();
+$("#org").keyup(function(e){
+	$('#org').next('.children').empty();
+	sync_layer(js_syntax, $('#hl'), $('#org'));
 });
 
-function sync_full(){
-	$('#hl').empty();
-    var text = $('#org').val();
+function sync_layer(syntax, target, source){
+	var text=source.val();
 
+	target.empty();
+	target.addClass('s_'+syntax.name);
+
+	// create spec table
+    var type_to_spec = {};
+    _.each(js_syntax.token_specs, function(spec){
+    	type_to_spec[spec.type] = spec;
+    });
+
+    // 
     _.each(text.split('\n'), function(str){
 		var ts = tokenize(js_syntax.token_specs, str);
 		
 		var line = $('<div class="line"/>');
 		var pe=0;
 		_.each(ts, function(t){
+			var spec = type_to_spec[t.type];
+
 			while(pe<t.begin){
 				line.append('&nbsp;');
 				pe+=1;
 			}
+			
+			if(spec.escape){
+				var raw_str = spec.f_unescape(t.body);
 
-			var hl = $('<span/>').attr('class','p_'+t.type).text(t.body);
-			line.append(hl);
+				// create new input
+				var org = $('<textarea/>').attr('class','editor quote').text(raw_str);
+				source.next('.children').append(org);
+				source.next('.children').append($('<div/>').attr('class','children'));
+
+				org.keyup(function(e){
+					org.next('.children').empty();
+					sync_layer(js_syntax, hl, org);
+					sync_layer_up(js_syntax, hl, org);
+				});
+
+				// create new layer
+				var hl = $('<div/>').attr('class','quote').text(raw_str);
+				line.append(hl);
+				sync_layer(js_syntax, hl, org);
+			}
+			else{
+				var hl = $('<span/>').attr('class','p_'+t.type).text(t.body);
+				line.append(hl);
+			}
 			pe = t.end;
 		});
-		$('#hl').append(line);
+		target.append(line);
 	});
 }
 
-function highlight_line(syntax){
+function sync_layer_up(syntax){
+
 }
 
 
@@ -239,15 +276,27 @@ function guess(){
 }
 
 js_syntax = {
+	name: 'javascript',
 	token_specs: [
 		{
 			type: 'dq',
 			escape: true,
+			trigger: '"',
+			f_escape: function(s){
+				return '"'+s+'"';
+			},
+			f_unescape: function(s){
+				return eval(s);
+			},
 			pattern: /"([^\\"]|\\[\\nt"])*"/
 		},
 		{
 			type: 'sq',
 			escape: true,
+			trigger: "'",
+			f_unescape: function(s){
+				return eval(s);
+			},
 			pattern: /'([^\\']|\\[\\nt'])*'/
 		},
 		{
@@ -274,6 +323,7 @@ js_syntax = {
 }
 
 html_syntax = {
+	name: 'html',
 	token_specs: [
 		{
 			escape: true,
@@ -297,11 +347,6 @@ html_syntax = {
 		}
 	]
 }
-
-
-console.log(tokenize(js_syntax.token_specs,'var x = "<div>一行目</div>" + "hoge";'));
-
-
 
 </script>
 
