@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+<title>Deep Syntax Editor</title>
+<!-- <link rel="stylesheet" href="static/dashboard.css"/> -->
+</head>
+<body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+
+<style>
+@import url(http://fonts.googleapis.com/css?family=Orbitron);
+
+/* overall layout */
+.column{
+	display: table-cell;
+	width: 40em;
+	padding: 2em;
+	border-left: 1px dotted gray;
+}
+
+/* common codeblock */
+div{
+	font-family: monospace;
+}
+
+.quote{
+	border-radius: 5px;
+	box-shadow: rgba(0,0,0,0.2) 0 0 5px inset;
+	
+	position: relative;
+	display: inline-block;
+	vertical-align: top;
+}
+
+.p_keyword{
+	color: #00a;
+}
+
+.p_string{
+	color: #f80;
+}
+
+.s_plain{
+	background-color: white;
+}
+
+.s_javascript{
+	background-color: #fffaf5;
+}
+
+.s_html{
+	background-color: #fafaff;
+}
+
+/* deep syntax */
+.current_syntax{
+	position: absolute;
+	top: 0.1em;
+	left: 0.1em;
+
+	font-size: 50%;
+	color: #888;
+	font-family: 'Orbitron', sans-serif;
+}
+</style>
+
+<div>
+	<div class="column">
+		<h1>古典的表示</h1>
+
+		<div class="quote s_javascript">
+		<span class="p_keyword">var</span> x = <span class="p_string">"&lt;div&gt;一行目\n\"二行目\"&lt;/div&gt;"</span>;
+		</div>
+	</div>
+
+	<div class="column">
+		<h1>深いシンタックス</h1>
+		
+		<div class="quote s_javascript" title="javascript">
+		<span class="p_keyword">var</span> x =
+		<div class="quote s_html" title="HTML in string">
+			<div class="line">&lt;<span class="p_keyword">div</span>&gt;</div>
+			<div class="line">一行目</div>
+			<div class="line">"二行目"</div>
+			<div class="line">
+			
+				<div class="line">&lt;/<span class="p_keyword">div</span>&gt;</div>
+			</div>
+		</div>;
+	</div>
+</div>
+
+<script>
+$("div").keyup(function(e) {
+    console.log(e.target);
+    console.log(window.getSelection());
+});
+
+function highlight_line(syntax){
+
+}
+
+</script>
+
+</body>
+</html>
