@@ -6,8 +6,8 @@
 <!-- <link rel="stylesheet" href="static/dashboard.css"/> -->
 </head>
 <body>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
-
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+	<script src="./underscore.js"></script>
 <style>
 @import url(http://fonts.googleapis.com/css?family=Orbitron);
 
@@ -41,6 +41,10 @@ div{
 	color: #f80;
 }
 
+.p_number{
+	color: #88a;
+}
+
 .s_plain{
 	background-color: white;
 }
@@ -63,14 +67,37 @@ div{
 	color: #888;
 	font-family: 'Orbitron', sans-serif;
 }
+
+/* deep syntax live */
+.editor{
+	font-family: monospace;
+	font-size: 12px;
+	width: 40em;
+	height: 10em;
+}
+.editor .line{
+	height: 15px;
+}
+textarea.editor{
+	border:none;
+	resize:none;
+	padding: 0;
+	line-height: 15px;
+
+}
 </style>
 
-<div>
+<div class="row">
 	<div class="column">
 		<h1>古典的表示</h1>
 
 		<div class="quote s_javascript">
-		<span class="p_keyword">var</span> x = <span class="p_string">"&lt;div&gt;一行目\n\"二行目\"&lt;/div&gt;"</span>;
+			<div class="line">
+			<span class="p_keyword">var</span> x = <span class="p_string">"&lt;div&gt;一行目\n\"二行目\"&lt;/div&gt;"</span>;
+		</div>
+		<div class="line">
+		alert();
+	</div>
 		</div>
 	</div>
 
@@ -78,28 +105,203 @@ div{
 		<h1>深いシンタックス</h1>
 		
 		<div class="quote s_javascript" title="javascript">
-		<span class="p_keyword">var</span> x =
-		<div class="quote s_html" title="HTML in string">
-			<div class="line">&lt;<span class="p_keyword">div</span>&gt;</div>
-			<div class="line">一行目</div>
-			<div class="line">"二行目"</div>
 			<div class="line">
-			
-				<div class="line">&lt;/<span class="p_keyword">div</span>&gt;</div>
+				<span class="p_keyword">var</span> x =
+				<div class="quote s_html" title="HTML in string">
+					<div class="line">&lt;<span class="p_keyword">div</span>&gt;</div>
+					<div class="line">一行目</div>
+					<div class="line">"二行目"</div>
+					<div class="line">
+					
+						<div class="line">&lt;/<span class="p_keyword">div</span>&gt;</div>
+					</div>
+				</div>;
 			</div>
-		</div>;
+			<div class="line">alert();</div>
+	</div>
+</div>
+
+<div>
+	<h1>demo</h1>
+	<div style="position:relative">
+		<div class="editor quote" style="" id="hl"></div>
+		<br/>
+		<textarea class="editor quote" id="org"></textarea>
 	</div>
 </div>
 
 <script>
-$("div").keyup(function(e) {
-    console.log(e.target);
-    console.log(window.getSelection());
+$("#org").keyup(function(e) {
+	sync_full();
 });
 
-function highlight_line(syntax){
+function sync_full(){
+	$('#hl').empty();
+    var text = $('#org').val();
 
+    _.each(text.split('\n'), function(str){
+		var ts = tokenize(js_syntax.token_specs, str);
+		
+		var line = $('<div class="line"/>');
+		var pe=0;
+		_.each(ts, function(t){
+			while(pe<t.begin){
+				line.append('&nbsp;');
+				pe+=1;
+			}
+
+			var hl = $('<span/>').attr('class','p_'+t.type).text(t.body);
+			line.append(hl);
+			pe = t.end;
+		});
+		$('#hl').append(line);
+	});
 }
+
+function highlight_line(syntax){
+}
+
+
+// return token as ranges
+// "ab cd" -> [{begin:0, end:2, type:'id'}, {begin:3, end:5, type:'id'}]]
+// returned ranges are non-overlapping and in descending order.
+function tokenize(token_specs, line){
+	function word_to_tokens_by_rest(word){
+		if(word.is_token){
+			word.type = _.first(token_specs).type;
+			return word;
+		}
+		else{
+			return _.map(tokenize(_.rest(token_specs), word.body),
+				function(sub_token){
+					sub_token.begin += word.begin;
+					sub_token.end += word.begin;
+					return sub_token;
+				});
+		}
+	}
+
+	if(token_specs.length>0){
+		return _.flatten(_.map(
+			tokenize1(_.first(token_specs).pattern, line),
+			word_to_tokens_by_rest));
+	}
+	else
+		return [];
+}
+
+// return ranges
+function tokenize1(pattern, phrase){
+	var offset = 0;
+	var words = [];
+	while(phrase.length>0){
+		var res = pattern.exec(phrase);
+		if(res){
+			if(res.index>0){
+				words.push({
+					is_token: false,
+					begin: offset,
+					end: offset+res.index,
+					body: phrase.slice(0,res.index)
+				});
+			}
+
+			words.push({
+				is_token: true,
+				begin: offset+res.index,
+				end: offset+res.index+res[0].length,
+				body: res[0]
+			});
+
+			var doffset = res.index+res[0].length;
+			offset += doffset;
+			phrase = phrase.slice(doffset);
+		}
+		else{
+			if(phrase.length>0){
+				words.push({
+					is_token: false,
+					begin: offset,
+					end: offset+phrase.length,
+					body: phrase
+				});
+				break;
+			}
+		}
+	}
+
+	return words;
+}
+
+
+function guess(){
+	return 'plain';
+}
+
+js_syntax = {
+	token_specs: [
+		{
+			type: 'dq',
+			escape: true,
+			pattern: /"([^\\"]|\\[\\nt"])*"/
+		},
+		{
+			type: 'sq',
+			escape: true,
+			pattern: /'([^\\']|\\[\\nt'])*'/
+		},
+		{
+			escape: false,
+			type: 'delim',
+			pattern: /[=+*!$%&(){}<>=-^;\/\-\[\]]/
+		},
+		{
+			escape: false,
+			type: 'keyword',
+			pattern: /(var|function|return)/
+		},
+		{
+			escape: false,
+			type: 'number',
+			pattern: /[0-9]+/
+		},
+		{
+			escape: false,
+			type: 'identifier',
+			pattern: /\S+/
+		}
+	]
+}
+
+html_syntax = {
+	token_specs: [
+		{
+			escape: true,
+			type: 'attrib',
+			pattern: /"([^\\"]|\\[\\nt"])*"/
+		},
+		{
+			escape: false,
+			type: 'delim',
+			pattern: /[<>\/]/
+		},
+		{
+			escape: false,
+			type: 'tag',
+			pattern: /(html|body|head|div|span|a|table|script|style|meta|title)/
+		},
+		{
+			escape: false,
+			type: 'other',
+			pattern: /.+/
+		}
+	]
+}
+
+
+console.log(tokenize(js_syntax.token_specs,'var x = "<div>一行目</div>" + "hoge";'));
+
+
 
 </script>
 
