@@ -84,10 +84,14 @@ div{
 	font-size: 12px;
 	font-family: monospace;
 	line-height: 15px;
-	height: 5em;
+	height: 10em;
+	width: 40em;
+	opacity: 0.5;
 }
-.children{
-	margin-left: 1em;
+.cursor{
+	border-left: 2px solid black;
+	height: 15px;
+	display: inline-block;
 }
 </style>
 
@@ -129,6 +133,8 @@ div{
 	<h1>demo</h1>
 	<div style="position:relative">
 		<div class="editor quote" style="" id="hl">
+			<div class="line">
+			</div>
 		</div>
 		<br/>
 
@@ -138,6 +144,10 @@ div{
 
 <script>
 var curr_target = null;
+var cursor_span = null;
+var cursor_index = 0;
+var ix_line=0, ix_char=0;
+
 $(document).ready(function(){
 	make_editable($('#hl'));
 	curr_target = $('#hl');
@@ -151,26 +161,37 @@ $('#org').click(function(e){
 });
 
 $('#org').keyup(function(e){
+	console.log(e.keyCode); // 37:left 39:right 38:up 40:down
+
 	var text = $('#org').val();
 	curr_target.data('raw',text);
-	sync_layer_down(curr_target, text);
+
+	var ttext = text.slice(0,$('#org')[0].selectionStart);
+	var nlines = ttext.split('\n').length;
+	if(nlines == 0){
+		ix_line = 0;
+		ix_char = 0;
+	}
+	else{
+		ix_line = nlines-1;
+		ix_char = _.last(ttext.split('\n')).length;
+	}
+	console.log('cursor',ix_line,ix_char);
+
+	sync_layer_down(curr_target, text, true);
 	sync_layer_up(curr_target);
 });
+
 
 function make_editable(target){
 	target.click(function(e){
 		console.log('focusing on',target);
 		curr_target = target;
+		ix_line = 0;
+		ix_char = 0;
 
 		$('#org').val(target.data('raw'));
-
-		/*$('#org').css('position','absolute');
-		$('#org').css('left',target.position().left);
-		$('#org').css('top',target.position().top);
-		$('#org').css('width',target.position().width);
-		$('#org').css('height',target.position().height);*/
 		$('#org').focus();
-		//$('#org').css('opacity','0');
 
 		return false;
 	});
@@ -201,11 +222,12 @@ function sync_layer_up(target){
 }
 
 // text to repr
-function sync_layer_down(target, source_str){
+function sync_layer_down(target, source_str, first){
 	var text = source_str;
 	var syntax = guess_syntax(text);
 
 	target.empty();
+
 	target.removeClass('s_plain');
 	target.removeClass('s_javascript');
 	target.removeClass('s_html');
@@ -219,40 +241,66 @@ function sync_layer_down(target, source_str){
     	type_to_spec[spec.type] = spec;
     });
 
-    // 
-    _.each(text.split('\n'), function(str){
+    // convert text to repr
+    var placed_cursor = !first; // treat as "placed" when not in first plane
+    var ls = text.split('\n');
+    if(ls.length == 0) ls = [''];
+
+    _.each(ls, function(str, iline){
 		var ts = tokenize(syntax.token_specs, str);
-		
 		var line = $('<div class="line"/>');
 		var pe=0;
-		_.each(ts, function(t){
-			var spec = type_to_spec[t.type];
 
-			if(pe<t.begin){
+		function step_space_to(tb){
+			if(pe<tb){
 				var spaces=$('<span/>');
-				while(pe<t.begin){
+				while(pe<tb){
+					if(!placed_cursor && pe==ix_char && iline==ix_line){
+						spaces.append($('<div/>').attr('class','cursor'));
+						placed_cursor = true;
+					}
 					spaces.append('&nbsp;');
 					pe+=1;
+					if(!placed_cursor && pe==ix_char && iline==ix_line){
+						spaces.append($('<div/>').attr('class','cursor'));
+						placed_cursor = true;
+					}
 				}
 				line.append(spaces);
 			}
-			
+		}
+
+		_.each(ts, function(t){
+			var spec = type_to_spec[t.type];
+
+			step_space_to(t.begin);
+
 			if(spec.escape){
 				var raw_str = spec.f_unescape(t.body);
 
 				// create new layer
 				var hl = $('<div/>').attr('class','quote').text(raw_str).data('raw',raw_str);
 				line.append(hl);
-				sync_layer_down(hl, raw_str);
+				sync_layer_down(hl, raw_str, false);
 
 				make_editable(hl);
 			}
 			else{
-				var hl = $('<span/>').attr('class','p_'+t.type).text(t.body);
+				var hl = $('<span/>').attr('class','p_'+t.type);
+				if(!placed_cursor && iline==ix_line && t.begin<=ix_char && ix_char<=t.end){
+					var offset = ix_char-t.begin;
+					hl.append(t.body.slice(0,offset));
+					hl.append($('<div/>').attr('class','cursor'));
+					hl.append(t.body.slice(offset));
+					placed_cursor = true;
+				}
+				else
+					hl.text(t.body);
 				line.append(hl);
 			}
 			pe = t.end;
 		});
+		step_space_to(str.length);
 		target.append(line);
 	});
 }
