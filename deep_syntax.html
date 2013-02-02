@@ -143,7 +143,7 @@ $(document).ready(function(){
 $('#org').keyup(function(e){
 	var text = $('#org').val();
 	curr_target.data('raw',text);
-	sync_layer_down(js_syntax, curr_target, text);
+	sync_layer_down(curr_target, text);
 	sync_layer_up(curr_target);
 });
 
@@ -178,8 +178,9 @@ function sync_layer_up(target){
 }
 
 // text to repr
-function sync_layer_down(syntax, target, source_str){
-	var text=source_str;
+function sync_layer_down(target, source_str){
+	var text = source_str;
+	var syntax = guess_syntax(text);
 
 	target.empty();
 	target.addClass('s_'+syntax.name);
@@ -214,7 +215,7 @@ function sync_layer_down(syntax, target, source_str){
 				// create new layer
 				var hl = $('<div/>').attr('class','quote').text(raw_str).data('raw',raw_str);
 				line.append(hl);
-				sync_layer_down(js_syntax, hl, raw_str);
+				sync_layer_down(hl, raw_str);
 
 				make_editable(hl);
 			}
@@ -303,8 +304,25 @@ function tokenize1(pattern, phrase){
 }
 
 
-function guess(){
-	return 'plain';
+// very hackish syntax guessing usable only for demo.
+function guess_syntax(text){
+	var cnt_jskw = 0, cnt_tags = 0;
+	try{
+		cnt_jskw = text.match(/(var|function|alert)/g).length;
+	}catch(e){}
+	try{
+		cnt_tags = text.match(/<(div|a|span|html|body)/g).length;
+	}catch(e){}
+
+	var score_js = (cnt_jskw*5) / text.length;
+	var score_html = (cnt_tags*5) / text.length;
+	scores = [
+		[js_syntax, score_js],
+		[html_syntax, score_html],
+		[plain_syntax, 1-(score_js+score_html)]
+	]
+	
+	return _.max(scores, function(p){return p[1];})[0];
 }
 
 js_syntax = {
@@ -386,6 +404,17 @@ html_syntax = {
 			escape: false,
 			type: 'other',
 			pattern: /.+/
+		}
+	]
+}
+
+plain_syntax = {
+	name: 'plain',
+	token_specs: [
+		{
+			type: 'all',
+			escape: false,
+			pattern: /.*/
 		}
 	]
 }
