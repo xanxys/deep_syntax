@@ -95,7 +95,7 @@ textarea.editor{
 
 		<div class="quote s_javascript">
 			<div class="line">
-			<span class="p_keyword">var</span> x = <span class="p_string">"&lt;div&gt;一行目\n\"二行目\"&lt;/div&gt;"</span>;
+			<span class="p_keyword">var</span> x = <span class="p_string">"&lt;div&gt;\n一行目\n\"二行目\"\n&lt;/div&gt;"</span>;
 		</div>
 		<div class="line">
 		alert();
@@ -158,18 +158,15 @@ function make_editable(target){
 
 // repr to text
 function sync_layer_up(target){
-	var parent = target.parents('.quote');
+	var parent = target.parents('.quote').first();
 	if(parent.length == 0) return;
 	
 	function line_to_str(line){
-		return _.map(line.children, function(node){
-			var ws = [];
-			if($(node).is('span')){
+		return _.map($(line).children(), function(node){
+			if($(node).is('span'))
 				return node.innerText;
-			}
-			else if($(node).is('div')){
+			else if($(node).is('div'))
 				return js_syntax.token_specs[0].f_escape($(node).data('raw'));
-			}
 			else
 				return '';
 		}).join('');
@@ -202,12 +199,14 @@ function sync_layer_down(syntax, target, source_str){
 		_.each(ts, function(t){
 			var spec = type_to_spec[t.type];
 
-			var spaces=$('<span/>');
-			while(pe<t.begin){
-				spaces.append('&nbsp;');
-				pe+=1;
+			if(pe<t.begin){
+				var spaces=$('<span/>');
+				while(pe<t.begin){
+					spaces.append('&nbsp;');
+					pe+=1;
+				}
+				line.append(spaces);
 			}
-			line.append(spaces);
 			
 			if(spec.escape){
 				var raw_str = spec.f_unescape(t.body);
@@ -323,6 +322,8 @@ js_syntax = {
 						return '\\\\';
 					else if(c=='"')
 						return '\\"';
+					else
+						return c;
 				}
 				return '"'+s.replace(/(\n|\\|")/g, to_esc)+'"';
 			},
